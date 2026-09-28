@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>もぐらたたき</title>
+  <style>
+    /* ===== 全体の見た目 ===== */
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: sans-serif;
+      background: linear-gradient(#87ceeb 0%, #bfe6ff 35%, #9ccc65 35%, #7cb342 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px;
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    h1 {
+      margin: 8px 0;
+      color: #fff;
+      text-shadow: 0 3px 0 #5d4037, 0 5px 8px rgba(0,0,0,0.3);
+      letter-spacing: 2px;
+    }
+    .info {
+      display: flex;
+      gap: 24px;
+      font-size: 20px;
+      font-weight: bold;
+      margin-bottom: 16px;
+      background: rgba(255,255,255,0.85);
+      padding: 6px 18px;
+      border-radius: 999px;
+      box-shadow: 0 3px 0 rgba(0,0,0,0.15);
+      color: #3e2723;
+    }
+
+    /* ===== 地面（少し奥に傾けて立体的に見せる） ===== */
+    .field { perspective: 800px; }
+    .board {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr); /* 3列 */
+      gap: 6px;
+      width: min(90vw, 380px);
+      padding: 14px;
+      border-radius: 24px;
+      background: radial-gradient(circle at 50% 30%, #aed581, #7cb342 70%);
+      transform: rotateX(14deg);
+      box-shadow:
+        0 14px 0 #558b2f,              /* 地面の厚み */
+        0 26px 30px rgba(0,0,0,0.35);  /* 地面の影 */
+    }
+
+    /* ===== 1つの穴 ===== */
+    .hole {
+      position: relative;
+      aspect-ratio: 1 / 1;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    /* 盛り上がった土 */
+    .mound {
+      position: absolute;
+      left: 4%; bottom: 4%;
+      width: 92%; height: 38%;
+      border-radius: 50%;
+      background: radial-gradient(ellipse at 50% 30%, #a1887f, #6d4c41 70%);
+      box-shadow: 0 6px 0 #4e342e, 0 10px 12px rgba(0,0,0,0.35);
+    }
+    /* 穴の暗い部分 */
+    .pit {
+      position: absolute;
+      left: 16%; bottom: 12%;
+      width: 68%; height: 24%;
+      border-radius: 50%;
+      background: radial-gradient(ellipse at 50% 40%, #000 40%, #2b1a12 100%);
+      box-shadow: inset 0 6px 8px rgba(0,0,0,0.8);
+    }
+    /* モグラが見える範囲（穴のふちで下を切り取る） */
+    .mole-wrap {
+      position: absolute;
+      left: 16%; bottom: 12%;
+      width: 68%; height: 88%;
+      overflow: hidden;
+      border-radius: 0 0 50% 50% / 0 0 13.6% 13.6%;
+      pointer-events: none;
+    }
+    .mole {
+      width: 100%;
+      height: 100%;
+      display: block;
+      transform: translateY(100%);            /* ふだんは穴の中に隠れている */
+      transition: transform 0.12s ease-out;
+    }
+    .hole.up .mole { transform: translateY(0); }   /* 顔を出す */
+    .hole.hit .mole {
+      transform: translateY(12%) scaleY(0.88);     /* たたかれてつぶれる */
+      transform-origin: bottom;
+    }
+
+    /* 目：ふだんは普通の目、たたかれたら×の目 */
+    .mole .dizzy { display: none; }
+    .hole.hit .mole .eyes { display: none; }
+    .hole.hit .mole .dizzy { display: inline; }
+
+    /* たたいたときの星 */
+    .star {
+      position: absolute;
+      left: 50%; top: 10%;
+      font-size: 28px;
+      color: #ffeb3b;
+      text-shadow: 0 0 4px #ff9800;
+      opacity: 0;
+      pointer-events: none;
+      transform: translate(-50%, 0);
+    }
+    .hole.hit .star { animation: pop 0.4s ease-out; }
+    @keyframes pop {
+      0%   { opacity: 1; transform: translate(-50%, 10px) scale(0.6); }
+      100% { opacity: 0; transform: translate(-50%, -24px) scale(1.4); }
+    }
+
+    /* ===== ボタンとメッセージ ===== */
+    button {
+      margin-top: 36px;
+      font-size: 20px;
+      font-weight: bold;
+      padding: 12px 40px;
+      border: none;
+      border-radius: 12px;
+      background: linear-gradient(#ffb74d, #fb8c00);
+      color: white;
+      cursor: pointer;
+      box-shadow: 0 5px 0 #e65100, 0 8px 10px rgba(0,0,0,0.25);
+    }
+    button:active { transform: translateY(4px); box-shadow: 0 1px 0 #e65100; }
+    button:disabled { background: #bdbdbd; box-shadow: 0 5px 0 #9e9e9e; cursor: default; }
+    #message {
+      margin-top: 14px;
+      font-size: 22px;
+      font-weight: bold;
+      color: #fff;
+      text-shadow: 0 2px 0 #33691e;
+      min-height: 1.5em;
+    }
+  </style>
+</head>
+<body>
+  <h1>もぐらたたき</h1>
+
+  <div class="info">
+    <div>のこり：<span id="time">30</span>秒</div>
+    <div>スコア：<span id="score">0</span></div>
+  </div>
+
+  <!-- モグラの色（グラデーション）の定義。全部の穴で共通で使います -->
+  <svg width="0" height="0" style="position:absolute">
+    <defs>
+      <radialGradient id="fur" cx="40%" cy="30%" r="75%">
+        <stop offset="0%" stop-color="#8d6e63"/>
+        <stop offset="55%" stop-color="#5d4037"/>
+        <stop offset="100%" stop-color="#2e1c16"/>
+      </radialGradient>
+      <radialGradient id="snout" cx="45%" cy="35%" r="70%">
+        <stop offset="0%" stop-color="#f3d9c9"/>
+        <stop offset="100%" stop-color="#c9a08a"/>
+      </radialGradient>
+      <radialGradient id="nose" cx="40%" cy="35%" r="70%">
+        <stop offset="0%" stop-color="#ffb3c1"/>
+        <stop offset="100%" stop-color="#d6456a"/>
+      </radialGradient>
+      <radialGradient id="paw" cx="40%" cy="30%" r="75%">
+        <stop offset="0%" stop-color="#ffd7cc"/>
+        <stop offset="100%" stop-color="#e59a8a"/>
+      </radialGradient>
+    </defs>
+  </svg>
+
+  <!-- 3×3の穴（JavaScriptで9個作ります） -->
+  <div class="field">
+    <div class="board" id="board"></div>
+  </div>
+
+  <button id="startBtn">スタート</button>
+  <div id="message"></div>
+
+  <script>
+    // ===== ゲームの設定（ここの数字を変えると難易度が変わります） =====
+    const GAME_TIME = 30;     // 制限時間（秒）
+    const MOLE_SPEED = 800;   // モグラが出ている時間（ミリ秒）
+
+    // ===== モグラの絵（SVG） =====
+    const MOLE_SVG = `
+      <svg class="mole" viewBox="0 0 100 100">
+        <!-- 体 -->
+        <ellipse cx="50" cy="64" rx="36" ry="42" fill="url(#fur)"/>
+        <!-- 体のツヤ -->
+        <ellipse cx="38" cy="36" rx="10" ry="6" fill="#fff" opacity="0.18"/>
+        <!-- おなか -->
+        <ellipse cx="50" cy="86" rx="20" ry="16" fill="#8d6e63" opacity="0.6"/>
+        <!-- ほっぺ -->
+        <ellipse cx="30" cy="58" rx="6" ry="4" fill="#ff8a80" opacity="0.5"/>
+        <ellipse cx="70" cy="58" rx="6" ry="4" fill="#ff8a80" opacity="0.5"/>
+        <!-- 口のまわり（とがった鼻先） -->
+        <ellipse cx="50" cy="56" rx="15" ry="11" fill="url(#snout)"/>
+        <!-- ひげ -->
+        <g stroke="#3e2723" stroke-width="1" stroke-linecap="round" opacity="0.7">
+          <line x1="36" y1="55" x2="20" y2="51"/>
+          <line x1="36" y1="58" x2="19" y2="59"/>
+          <line x1="64" y1="55" x2="80" y2="51"/>
+          <line x1="64" y1="58" x2="81" y2="59"/>
+        </g>
+        <!-- 鼻（ピンク） -->
+        <ellipse cx="50" cy="49" rx="8" ry="6" fill="url(#nose)"/>
+        <ellipse cx="47.5" cy="47" rx="2.5" ry="1.5" fill="#fff" opacity="0.8"/>
+        <!-- 口 -->
+        <path d="M45 61 Q50 65 55 61" stroke="#5d4037" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+        <!-- 目（モグラは目が小さい） -->
+        <g class="eyes">
+          <circle cx="38" cy="40" r="3" fill="#111"/>
+          <circle cx="62" cy="40" r="3" fill="#111"/>
+          <circle cx="37" cy="39" r="1" fill="#fff"/>
+          <circle cx="61" cy="39" r="1" fill="#fff"/>
+        </g>
+        <!-- たたかれたときの目（×） -->
+        <g class="dizzy" stroke="#111" stroke-width="2" stroke-linecap="round">
+          <line x1="35" y1="37" x2="41" y2="43"/><line x1="41" y1="37" x2="35" y2="43"/>
+          <line x1="59" y1="37" x2="65" y2="43"/><line x1="65" y1="37" x2="59" y2="43"/>
+        </g>
+        <!-- 大きな手とツメ（穴のふちにかけている） -->
+        <g>
+          <ellipse cx="24" cy="84" rx="13" ry="9" fill="url(#paw)"/>
+          <ellipse cx="76" cy="84" rx="13" ry="9" fill="url(#paw)"/>
+          <g stroke="#b86b5c" stroke-width="1.5" stroke-linecap="round">
+            <line x1="17" y1="80" x2="15" y2="88"/><line x1="23" y1="78" x2="22" y2="89"/><line x1="29" y1="79" x2="30" y2="88"/>
+            <line x1="71" y1="79" x2="70" y2="88"/><line x1="77" y1="78" x2="78" y2="89"/><line x1="83" y1="80" x2="85" y2="88"/>
+          </g>
+        </g>
+      </svg>`;
+
+    // ===== 画面の部品を取ってくる =====
+    const board = document.getElementById("board");
+    const timeEl = document.getElementById("time");
+    const scoreEl = document.getElementById("score");
+    const startBtn = document.getElementById("startBtn");
+    const message = document.getElementById("message");
+
+    let score = 0;
+    let timeLeft = GAME_TIME;
+    let playing = false;
+    let currentMole = -1;     // いまモグラがいる穴の番号（-1 = いない）
+    let moleTimer, countdownTimer;
+
+    // ===== 穴を9個作る =====
+    const holes = [];
+    for (let i = 0; i < 9; i++) {
+      const hole = document.createElement("div");
+      hole.className = "hole";
+      hole.innerHTML = `
+        <div class="mound"></div>
+        <div class="pit"></div>
+        <div class="mole-wrap">${MOLE_SVG}</div>
+        <div class="star">★</div>`;
+      hole.addEventListener("pointerdown", () => whack(i));
+      board.appendChild(hole);
+      holes.push(hole);
+    }
+
+    // ===== モグラをランダムな穴に出す =====
+    function showMole() {
+      holes.forEach(h => h.classList.remove("up", "hit"));
+      let next;
+      do { next = Math.floor(Math.random() * 9); } while (next === currentMole); // 同じ穴が続かないように
+      currentMole = next;
+      holes[next].classList.add("up");
+    }
+
+    // ===== 穴をたたいたとき =====
+    function whack(i) {
+      if (!playing || i !== currentMole) return;
+      score++;
+      scoreEl.textContent = score;
+      holes[i].classList.add("hit");
+      currentMole = -1; // 同じモグラを2回たたけないように
+      // 少ししたら穴に引っこむ
+      setTimeout(() => {
+        if (currentMole !== i) holes[i].classList.remove("up", "hit");
+      }, 350);
+    }
+
+    // ===== ゲーム開始 =====
+    function startGame() {
+      score = 0;
+      timeLeft = GAME_TIME;
+      playing = true;
+      scoreEl.textContent = score;
+      timeEl.textContent = timeLeft;
+      message.textContent = "";
+      startBtn.disabled = true;
+
+      showMole();
+      moleTimer = setInterval(showMole, MOLE_SPEED);
+      countdownTimer = setInterval(() => {
+        timeLeft--;
+        timeEl.textContent = timeLeft;
+        if (timeLeft <= 0) endGame();
+      }, 1000);
+    }
+
+    // ===== ゲーム終了 =====
+    function endGame() {
+      playing = false;
+      clearInterval(moleTimer);
+      clearInterval(countdownTimer);
+      holes.forEach(h => h.classList.remove("up", "hit"));
+      currentMole = -1;
+      message.textContent = `終了！ スコアは ${score} 点でした`;
+      startBtn.textContent = "もう一回";
+      startBtn.disabled = false;
+    }
+
+    startBtn.addEventListener("click", startGame);
+  </script>
+</body>
+</html>
